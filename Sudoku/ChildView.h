@@ -4,7 +4,7 @@
 
 
 #pragma once
-
+#include "game.h"
 
 // CChildView window
 
@@ -32,5 +32,8 @@ public:
 protected:
 	afx_msg void OnPaint();
 	DECLARE_MESSAGE_MAP()
+
+private:
+	game::Sudoku m_Game;
 };
 

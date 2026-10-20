@@ -16,12 +16,8 @@
 // CChildView
 
 CChildView::CChildView()
-{
-	//ASSERT(game::Table{ game::Table::initial }.is_valid());
-
-	game::Sudoku s{ 20, 20 };
-	int y = 0;
-}
+	:m_Game{ 20, 20 }
+{}
 
 CChildView::~CChildView()
 {}
@@ -52,8 +48,21 @@ void CChildView::OnPaint()
 {
 	CPaintDC dc(this); // device context for painting
 
-	// TODO: Add your message handler code here
+	CRect canvas;
+	GetClientRect(canvas);
+	int const big_side{ min(canvas.Height(), canvas.Width()) };
+	auto const cp{ canvas.CenterPoint() };
+	CRect const rTable{ CPoint{ cp.x - big_side / 2, cp.y - big_side / 2 }, CSize{ big_side, big_side } };
 
-	// Do not call CWnd::OnPaint() for painting messages
+	auto& tab{ m_Game.GetTable() };
+	CString s;
+
+	for (size_t iY = 0; iY < 9; iY++)
+		for (size_t iX = 0; iX < 9; iX++)
+			if (auto val{ tab.at(iY,iX) })
+			{
+				s.Format(_T("%d"), val);
+				dc.TextOut(200 + (int)iX * 40, 150 + (int)iY * 30, s);
+			}
 }
 

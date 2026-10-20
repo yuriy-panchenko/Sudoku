@@ -1,5 +1,6 @@
 #pragma once
 #include <array>
+#include <set>
 
 namespace game
 {
@@ -7,6 +8,11 @@ namespace game
 	using table_t = std::array<unsigned char, 9 * 9>;
 
 	bool is_valid(Line const&);
+	size_t to_row(size_t);
+	size_t to_column(size_t);
+	size_t to_room(size_t);
+
+	inline const std::set<unsigned char> all_possible = { 1,2,3,4,5,6,7,8,9, };
 
 	class Table
 		:public table_t
@@ -37,6 +43,7 @@ namespace game
 		void set_column(size_t, Line);
 
 		bool is_valid()const;
+		unsigned char at(size_t y, size_t x)const;
 	};
 
 	class Sudoku
@@ -46,7 +53,11 @@ namespace game
 		Sudoku(size_t digits_remain, size_t shuffle_count);
 		Sudoku(Table&&);
 
+		auto& GetTable()const { return m_Game; }
+		void SetNumber(size_t index, unsigned char val);
+
 	private:
 		Table m_Origin, m_Game;
+		std::array<std::set<unsigned char>, 9 * 9> m_Possible;
 	};
 }

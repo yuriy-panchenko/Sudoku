@@ -1,6 +1,5 @@
 #include "pch.h"
 #include "game.h"
-#include <set>
 #include <vector>
 
 namespace game
@@ -17,6 +16,23 @@ namespace game
 		return s.size() == l.size();
 	}
 
+	size_t to_row(size_t ind)
+	{
+		return ind / 9;
+	}
+
+	size_t to_column(size_t ind)
+	{
+		return ind % 9;
+	}
+
+	size_t to_room(size_t ind)
+	{
+		auto const x{ ind % 3 }, y{ ind / 3 };
+		return y * 9 * 3 + x * 3;
+	}
+
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	Line Table::get_row(size_t ind) const
 	{
 		auto itFrom{ begin() + 9 * ind }, itTo{ itFrom + 9 };
@@ -70,6 +86,11 @@ namespace game
 		return true;
 	}
 
+	unsigned char Table::at(size_t y, size_t x) const
+	{
+		return table_t::at(y * 9 + x);
+	}
+
 	Table::Table(size_t shuffle_count)
 		:table_t{ initial }
 	{
@@ -119,8 +140,33 @@ namespace game
 			(*this)[ind] = origin[ind];
 	}
 
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	Sudoku::Sudoku(size_t digits_remain, size_t shuffle_count)
 		:m_Origin{ shuffle_count }
 		, m_Game{ m_Origin, digits_remain }
-	{}
+	{
+		m_Possible.fill(all_possible);
+
+		for (size_t i = 0; i < 9 * 9; i++)
+			if (auto val{ m_Game[i] })
+				SetNumber(i, val);
+	}
+
+	void Sudoku::SetNumber(size_t index, unsigned char val)
+	{
+		m_Game[index] = val;
+
+		auto iLine{ to_row(index) };
+
+		for (size_t i = 0; i < 9; i++)
+			m_Possible[iLine * 9 + i].erase(val);
+
+		iLine = to_column(index);
+
+		for (size_t i = 0; i < 9; i++)
+			m_Possible[i * 9 + iLine].erase(val);
+
+		iLine = to_room(index);
+		
+	}
 }
