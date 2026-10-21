@@ -32,6 +32,8 @@ BEGIN_MESSAGE_MAP(CChildView, CWnd)
 	ON_WM_LBUTTONDBLCLK()
 	ON_WM_RBUTTONUP()
 	ON_WM_KEYDOWN()
+	ON_WM_MOUSEMOVE()
+	ON_WM_MOUSELEAVE()
 END_MESSAGE_MAP()
 
 
@@ -62,15 +64,17 @@ namespace
 	constexpr COLORREF clrThinLine = RGB(176, 184, 198);
 	constexpr COLORREF clrThickLine = RGB(40, 48, 66);
 	constexpr COLORREF clrGiven = RGB(28, 34, 48);
-	constexpr COLORREF clrPlayer = RGB(96, 130, 10);
+	constexpr COLORREF clrPlayer = RGB(76, 92, 48);
 	constexpr COLORREF clrCandidate = RGB(80, 92, 116);			// legal and selected
 	constexpr COLORREF clrCandidateFaint = RGB(196, 203, 215);	// legal, but erased by the player
+	constexpr COLORREF clrCandidateHover = RGB(200, 200, 20);	// text color of the candidate under the mouse
 
-	void MakeFont(CFont& font, int px, int weight)
+	void MakeFont(CFont& font, int px, int weight, bool italic = false)
 	{
 		LOGFONT lf{};
 		lf.lfHeight = -px;
 		lf.lfWeight = weight;
+		lf.lfItalic = italic;
 		lf.lfCharSet = DEFAULT_CHARSET;
 		lf.lfQuality = CLEARTYPE_QUALITY;
 		_tcscpy_s(lf.lfFaceName, _T("Segoe UI"));
@@ -174,10 +178,11 @@ void CChildView::OnPaint()
 		}
 
 		// 4. Digits and candidates.
-		CFont fontGiven, fontPlayer, fontCandidate;
+		CFont fontGiven, fontPlayer, fontCandidate, fontCandidateFaint;
 		MakeFont(fontGiven, cell * 75 / 100, FW_BOLD);
 		MakeFont(fontPlayer, cell * 75 / 100, FW_NORMAL);
 		MakeFont(fontCandidate, max(6, cell * 22 / 100), FW_NORMAL);
+		MakeFont(fontCandidateFaint, max(5, cell * 17 / 100), FW_NORMAL, true);
 
 		dc.SetBkMode(TRANSPARENT);
 		auto* const oldFont{ dc.SelectObject(&fontGiven) };
@@ -200,13 +205,14 @@ void CChildView::OnPaint()
 				}
 				else if (m_bShowCandidates)
 				{
-					dc.SelectObject(&fontCandidate);
-
-					// Every legal digit is drawn: solid if still selected, faint if the player erased it.
+					// Every legal digit is drawn: solid if still selected, faint (smaller, italic) if the player erased it.
 					int const sub{ cell / 3 };
 					for (auto d : m_Game.Legal(ind))
 					{
-						dc.SetTextColor(possible[ind].count(d) ? clrCandidate : clrCandidateFaint);
+						bool const selected{ possible[ind].count(d) != 0 };
+						bool const hovered{ (int)ind == m_Hover.cell && d == m_Hover.digit };
+						dc.SelectObject(selected ? &fontCandidate : &fontCandidateFaint);
+						dc.SetTextColor(hovered ? clrCandidateHover : selected ? clrCandidate : clrCandidateFaint);
 						int const sx{ (d - 1) % 3 }, sy{ (d - 1) / 3 };
 						CRect sr{ r.left + sx * sub, r.top + sy * sub, r.left + (sx + 1) * sub, r.top + (sy + 1) * sub };
 						TCHAR const ch{ (TCHAR)(_T('0') + d) };
@@ -266,12 +272,10 @@ void CChildView::OnLButtonDown(UINT nFlags, CPoint point)
 	if (hit.cell < 0)
 		return;
 
-	bool const wasSelected{ hit.cell == m_iSelected };
 	m_iSelected = hit.cell;
 
-	// Only the selected cell reacts to clicks on its candidates: erase it if selected, put it back if it is
-	// legal here. The click that selects a cell changes nothing. Numbers are only selected.
-	if (wasSelected && m_bShowCandidates)
+	// Click on a candidate: erase it if selected, put it back if it is legal here. Numbers are only selected.
+	if (m_bShowCandidates)
 		m_Game.ToggleCandidate(hit.cell, (unsigned char)hit.digit);
 
 	Invalidate(FALSE);
@@ -294,7 +298,7 @@ void CChildView::OnLButtonDblClk(UINT nFlags, CPoint point)
 	if (!m_bShowCandidates)
 		return;
 
-	// The first click of this double-click may have just erased the candidate. If so, put it back
+	// The first click of this double-click has just toggled the candidate. If that erased it, put it back
 	// (a no-op for illegal digits), so placing works the same for solid and faint candidates.
 	auto const digit{ (unsigned char)hit.digit };
 	if (!m_Game.GetPossible()[hit.cell].count(digit))
@@ -364,4 +368,35 @@ void CChildView::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
 
 	m_iSelected = y * 9 + x;
 	Invalidate(FALSE);
+}
+
+void CChildView::OnMouseMove(UINT nFlags, CPoint point)
+{
+	if (!m_bTrackingMouse)	// ask for WM_MOUSELEAVE, so the highlight goes away when the mouse leaves the window
+	{
+		TRACKMOUSEEVENT tme{ sizeof(tme), TME_LEAVE, m_hWnd, 0 };
+		m_bTrackingMouse = ::TrackMouseEvent(&tme);
+	}
+
+	// Only a candidate slot (a legal digit of an empty cell) is highlighted.
+	Hit hit{ HitTest(point) };
+	if (!m_bShowCandidates || hit.cell < 0 || m_Game.GetTable()[hit.cell] || !m_Game.Legal(hit.cell).count((unsigned char)hit.digit))
+		hit = Hit{};
+
+	if (hit.cell != m_Hover.cell || hit.digit != m_Hover.digit)
+	{
+		m_Hover = hit;
+		Invalidate(FALSE);
+	}
+}
+
+void CChildView::OnMouseLeave()
+{
+	m_bTrackingMouse = FALSE;
+
+	if (m_Hover.cell >= 0)
+	{
+		m_Hover = Hit{};
+		Invalidate(FALSE);
+	}
 }
