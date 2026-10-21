@@ -168,10 +168,10 @@ void CChildView::OnPaint()
 		if (m_iSelected >= 0)
 		{
 			CRect r{ cell_rect(m_iSelected % 9, m_iSelected / 9) };
-			r.DeflateRect(1, 1);
+			//r.DeflateRect(1, 1);
 			if (m_Game.IsDead(m_iSelected))
 				r.DeflateRect(thickDead, thickDead);	// keep the red frame visible
-			frame(r, 1, clrSelectedBorder);
+			frame(r, 2, clrSelectedBorder);
 		}
 
 		// 4. Digits and candidates.
