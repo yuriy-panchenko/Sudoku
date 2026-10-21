@@ -18,6 +18,7 @@
 CChildView::CChildView()
 	:m_Game{ 20, 20 }
 	, m_bShowCandidates{ TRUE }
+	, m_iSelected{ -1 }
 {}
 
 CChildView::~CChildView()
@@ -28,6 +29,10 @@ BEGIN_MESSAGE_MAP(CChildView, CWnd)
 	ON_WM_PAINT()
 	ON_WM_ERASEBKGND()
 	ON_WM_LBUTTONDOWN()
+	ON_WM_LBUTTONDBLCLK()
+	ON_WM_RBUTTONUP()
+	ON_WM_CHAR()
+	ON_WM_KEYDOWN()
 END_MESSAGE_MAP()
 
 
@@ -52,13 +57,15 @@ namespace
 	constexpr COLORREF clrBackdrop = RGB(236, 239, 244);
 	constexpr COLORREF clrRoomLight = RGB(255, 255, 255);
 	constexpr COLORREF clrRoomTint = RGB(226, 232, 242);
-	constexpr COLORREF clrConflictBg = RGB(255, 205, 205);
+	constexpr COLORREF clrSelectedBorder = RGB(30, 100, 210);
+	constexpr COLORREF clrDeadBg = RGB(255, 205, 205);
+	constexpr COLORREF clrDeadBorder = RGB(200, 40, 40);
 	constexpr COLORREF clrThinLine = RGB(176, 184, 198);
 	constexpr COLORREF clrThickLine = RGB(40, 48, 66);
 	constexpr COLORREF clrGiven = RGB(28, 34, 48);
 	constexpr COLORREF clrPlayer = RGB(30, 100, 210);
-	constexpr COLORREF clrConflictTxt = RGB(190, 30, 30);
-	constexpr COLORREF clrCandidate = RGB(130, 140, 158);
+	constexpr COLORREF clrCandidate = RGB(80, 92, 116);			// legal and selected
+	constexpr COLORREF clrCandidateFaint = RGB(196, 203, 215);	// legal, but erased by the player
 
 	void MakeFont(CFont& font, int px, int weight)
 	{
@@ -98,6 +105,7 @@ void CChildView::OnPaint()
 	int const margin{ 16 };
 	int const cell{ (min(client.Width(), client.Height()) - 2 * margin) / 9 };
 
+	m_rTable.SetRectEmpty();
 	if (cell >= 12)
 	{
 		int const side{ cell * 9 };
@@ -112,14 +120,14 @@ void CChildView::OnPaint()
 		auto& tab{ m_Game.GetTable() };
 		auto& possible{ m_Game.GetPossible() };
 
-		// 1. Backgrounds: checkerboard of 3x3 rooms, conflicting cells in red.
+		// 1. Backgrounds: checkerboard of 3x3 rooms, cells with no legal digit in red.
 		for (size_t iY = 0; iY < 9; iY++)
 			for (size_t iX = 0; iX < 9; iX++)
 			{
 				bool const tinted{ ((iX / 3 + iY / 3) % 2) != 0 };
 				COLORREF clr{ tinted ? clrRoomTint : clrRoomLight };
-				if (m_Game.IsConflict(iY * 9 + iX))
-					clr = clrConflictBg;
+				if (m_Game.IsDead(iY * 9 + iX))
+					clr = clrDeadBg;
 				dc.FillSolidRect(cell_rect(iX, iY), clr);
 			}
 
@@ -138,7 +146,35 @@ void CChildView::OnPaint()
 			dc.FillSolidRect(origin.x - thick / 2, origin.y + i * cell - thick / 2, side + thick, thick, clrThickLine);
 		}
 
-		// 3. Digits and candidates.
+		// 3. Frames on top of the grid: thick red for contradictions, 1px blue for the selection.
+		auto frame = [&](CRect const& r, int t, COLORREF clr)
+			{
+				dc.FillSolidRect(r.left, r.top, r.Width(), t, clr);
+				dc.FillSolidRect(r.left, r.bottom - t, r.Width(), t, clr);
+				dc.FillSolidRect(r.left, r.top, t, r.Height(), clr);
+				dc.FillSolidRect(r.right - t, r.top, t, r.Height(), clr);
+			};
+
+		int const thickDead{ max(3, cell / 12) };
+		for (size_t iY = 0; iY < 9; iY++)
+			for (size_t iX = 0; iX < 9; iX++)
+				if (m_Game.IsDead(iY * 9 + iX))
+				{
+					CRect r{ cell_rect(iX, iY) };
+					r.DeflateRect(1, 1);
+					frame(r, thickDead, clrDeadBorder);
+				}
+
+		if (m_iSelected >= 0)
+		{
+			CRect r{ cell_rect(m_iSelected % 9, m_iSelected / 9) };
+			r.DeflateRect(1, 1);
+			if (m_Game.IsDead(m_iSelected))
+				r.DeflateRect(thickDead, thickDead);	// keep the red frame visible
+			frame(r, 1, clrSelectedBorder);
+		}
+
+		// 4. Digits and candidates.
 		CFont fontGiven, fontPlayer, fontCandidate;
 		MakeFont(fontGiven, cell * 75 / 100, FW_BOLD);
 		MakeFont(fontPlayer, cell * 75 / 100, FW_NORMAL);
@@ -157,7 +193,7 @@ void CChildView::OnPaint()
 				{
 					bool const given{ m_Game.IsGiven(ind) };
 					dc.SelectObject(given ? &fontGiven : &fontPlayer);
-					dc.SetTextColor(m_Game.IsConflict(ind) ? clrConflictTxt : given ? clrGiven : clrPlayer);
+					dc.SetTextColor(given ? clrGiven : clrPlayer);
 
 					CString s;
 					s.Format(_T("%d"), (int)val);
@@ -166,11 +202,12 @@ void CChildView::OnPaint()
 				else if (m_bShowCandidates)
 				{
 					dc.SelectObject(&fontCandidate);
-					dc.SetTextColor(clrCandidate);
 
+					// Every legal digit is drawn: solid if still selected, faint if the player erased it.
 					int const sub{ cell / 3 };
-					for (auto d : possible[ind])
+					for (auto d : m_Game.Legal(ind))
 					{
+						dc.SetTextColor(possible[ind].count(d) ? clrCandidate : clrCandidateFaint);
 						int const sx{ (d - 1) % 3 }, sy{ (d - 1) / 3 };
 						CRect sr{ r.left + sx * sub, r.top + sy * sub, r.left + (sx + 1) * sub, r.top + (sy + 1) * sub };
 						TCHAR const ch{ (TCHAR)(_T('0') + d) };
@@ -186,35 +223,132 @@ void CChildView::OnPaint()
 	dc.SelectObject(oldBmp);
 }
 
+CChildView::Hit CChildView::HitTest(CPoint pt) const
+{
+	Hit hit;
+	if (m_rTable.IsRectEmpty() || !m_rTable.PtInRect(pt))
+		return hit;
+
+	// Same integer geometry as OnPaint: the board is 9 cells of `cell` pixels, a cell holds 3x3 slots of `cell / 3`.
+	int const cell{ m_rTable.Width() / 9 };
+	int const sub{ cell / 3 };
+	int const x{ pt.x - m_rTable.left }, y{ pt.y - m_rTable.top };
+
+	hit.cell = y / cell * 9 + x / cell;
+	hit.digit = min((y % cell) / sub, 2) * 3 + min((x % cell) / sub, 2) + 1;
+	return hit;
+}
+
+void CChildView::EnterNumber(unsigned char val)
+{
+	if (m_iSelected < 0 || !m_Game.SetNumber(m_iSelected, val))
+		return;
+
+	Invalidate(FALSE);
+
+	if (val && m_Game.IsComplete())
+	{
+		UpdateWindow();	// show the finished board before the message
+		AfxMessageBox(_T("Solved!"));
+	}
+}
+
 void CChildView::OnLButtonDown(UINT nFlags, CPoint point)
 {
-	if (m_rTable.PtInRect(point))
+	SetFocus();	// keyboard input goes to the focused window
+
+	auto const hit{ HitTest(point) };
+	if (hit.cell < 0)
+		return;
+
+	bool const wasSelected{ hit.cell == m_iSelected };
+	m_iSelected = hit.cell;
+
+	// Only the selected cell reacts to clicks on its candidates: erase it if selected, put it back if it is
+	// legal here. The click that selects a cell changes nothing. Numbers are only selected.
+	if (wasSelected && m_bShowCandidates)
+		m_Game.ToggleCandidate(hit.cell, (unsigned char)hit.digit);
+
+	Invalidate(FALSE);
+}
+
+void CChildView::OnLButtonDblClk(UINT nFlags, CPoint point)
+{
+	auto const hit{ HitTest(point) };
+	if (hit.cell < 0)
+		return;
+
+	m_iSelected = hit.cell;
+
+	if (m_Game.GetTable()[hit.cell])
 	{
-		auto OneIn = [point](CRect r, int in)->CPoint
-			{
-				return { (point.x - r.left) * in / r.Width(),
-					(point.y - r.top) * in / r.Height() };
-			};
-
-		auto rect{ m_rTable };
-		auto const cell_size{ rect.Width() / 9. };
-
-		auto const coo_tab{ OneIn(rect, 9) };
-		ASSERT(coo_tab.x > -1 && coo_tab.x < 9);
-		ASSERT(coo_tab.y > -1 && coo_tab.y < 9);
-
-		rect.left += int(coo_tab.x * cell_size);
-		rect.right = m_rTable.left + int((coo_tab.x + 1) * cell_size);
-		rect.top += int(coo_tab.y * cell_size);
-		rect.bottom = m_rTable.top + int((coo_tab.y + 1) * cell_size);
-
-		auto const coo_cell{ OneIn(rect,3) };
-		ASSERT(coo_cell.x > -1 && coo_cell.x < 3);
-		ASSERT(coo_cell.y > -1 && coo_cell.y < 3);
-
-		/*int const gX{ (point.x - m_rTable.left) * 9 / m_rTable.Width() },
-			gY{ (point.y - m_rTable.top) * 9 / m_rTable.Height() };
-		ASSERT(gX > -1 && gX < 9);
-		ASSERT(gY > -1 && gY < 9);*/
+		EnterNumber(0);	// double-click on a Number removes it (givens ignore this)
+		return;
 	}
+
+	if (!m_bShowCandidates)
+		return;
+
+	// The first click of this double-click may have just erased the candidate. If so, put it back
+	// (a no-op for illegal digits), so placing works the same for solid and faint candidates.
+	auto const digit{ (unsigned char)hit.digit };
+	if (!m_Game.GetPossible()[hit.cell].count(digit))
+		m_Game.ToggleCandidate(hit.cell, digit);
+
+	EnterNumber(digit);
+	Invalidate(FALSE);
+}
+
+void CChildView::OnRButtonUp(UINT nFlags, CPoint point)
+{
+	enum { idRepopulate = 1, idShowCandidates };
+
+	CMenu menu;
+	menu.CreatePopupMenu();
+	menu.AppendMenu(MF_STRING, idRepopulate, _T("Repopulate all candidates"));
+	menu.AppendMenu(MF_STRING | (m_bShowCandidates ? MF_CHECKED : MF_UNCHECKED), idShowCandidates, _T("Show candidates"));
+
+	ClientToScreen(&point);
+	switch (menu.TrackPopupMenu(TPM_RETURNCMD | TPM_RIGHTBUTTON, point.x, point.y, this))
+	{
+	case idRepopulate:
+		m_Game.RepopulateCandidates();
+		break;
+	case idShowCandidates:
+		m_bShowCandidates = !m_bShowCandidates;
+		break;
+	default:
+		return;
+	}
+
+	Invalidate(FALSE);
+}
+
+void CChildView::OnChar(UINT nChar, UINT nRepCnt, UINT nFlags)
+{
+	if (nChar >= _T('1') && nChar <= _T('9'))
+		EnterNumber((unsigned char)(nChar - _T('0')));
+	else if (nChar == _T('0') || nChar == VK_BACK)
+		EnterNumber(0);
+	else
+		CWnd::OnChar(nChar, nRepCnt, nFlags);
+}
+
+void CChildView::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
+{
+	int const sel{ m_iSelected < 0 ? 40 : m_iSelected };
+	int x{ sel % 9 }, y{ sel / 9 };
+
+	switch (nChar)
+	{
+	case VK_DELETE:	EnterNumber(0);			return;
+	case VK_LEFT:	x = max(0, x - 1);		break;
+	case VK_RIGHT:	x = min(8, x + 1);		break;
+	case VK_UP:		y = max(0, y - 1);		break;
+	case VK_DOWN:	y = min(8, y + 1);		break;
+	default:		CWnd::OnKeyDown(nChar, nRepCnt, nFlags);	return;
+	}
+
+	m_iSelected = y * 9 + x;
+	Invalidate(FALSE);
 }

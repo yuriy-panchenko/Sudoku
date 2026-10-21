@@ -57,14 +57,29 @@ namespace game
 		auto& GetTable()const { return m_Game; }
 		auto& GetPossible()const { return m_Possible; }
 		bool IsGiven(size_t index)const { return m_Given[index]; }
-		bool IsConflict(size_t index)const;
+		bool IsComplete()const;
 
-		// val == 0 clears the cell; givens are read-only.
-		void SetNumber(size_t index, unsigned char val);
+		// Empty cell without a single legal digit: a contradiction.
+		bool IsDead(size_t index)const;
+
+		// Digits that no peer (row, column, room) holds as a Number. Empty for a filled cell.
+		// GetPossible() is always a subset of this: it is what the player has left selected.
+		std::set<unsigned char> Legal(size_t index)const;
+
+		// val 1..9: puts a Number into an empty cell, only if val is currently a candidate there.
+		//           Removes val from the candidates of the peers.
+		// val == 0: removes a Number; the cell gets all its legal candidates, peers are untouched.
+		// Givens are read-only. Returns true if anything changed.
+		bool SetNumber(size_t index, unsigned char val);
+
+		// Erases a selected candidate, or puts it back if it is legal. Returns true if anything changed.
+		bool ToggleCandidate(size_t index, unsigned char val);
+
+		// Every empty cell gets all its legal candidates (drops the player's manual erasures).
+		void RepopulateCandidates();
 
 	private:
 		void Eliminate(size_t index, unsigned char val);
-		void RecalcPossible();
 
 	private:
 		Table m_Origin, m_Game;

@@ -33,11 +33,27 @@ protected:
 	afx_msg void OnPaint();
 	afx_msg BOOL OnEraseBkgnd(CDC* pDC);
 	afx_msg void OnLButtonDown(UINT nFlags, CPoint point);
+	afx_msg void OnLButtonDblClk(UINT nFlags, CPoint point);
+	afx_msg void OnRButtonUp(UINT nFlags, CPoint point);
+	afx_msg void OnChar(UINT nChar, UINT nRepCnt, UINT nFlags);
+	afx_msg void OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags);
 	DECLARE_MESSAGE_MAP()
+
+private:
+	struct Hit
+	{
+		int cell{ -1 };		// 0..80, -1 = outside the board
+		int digit{ 0 };		// 1..9 = which candidate slot of the cell was hit
+	};
+	Hit HitTest(CPoint) const;
+
+	// val 1..9 places a Number into the selected cell, 0 removes it.
+	void EnterNumber(unsigned char val);
 
 private:
 	game::Sudoku m_Game;
 	BOOL m_bShowCandidates;
 	CRect m_rTable;
+	int m_iSelected;	// selected cell, -1 = none
 };
 

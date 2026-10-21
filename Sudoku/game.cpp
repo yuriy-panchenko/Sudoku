@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "game.h"
 #include <vector>
+#include <algorithm>
 
 namespace game
 {
@@ -162,52 +163,78 @@ namespace game
 		for (size_t i = 0; i < m_Game.size(); i++)
 			m_Given[i] = m_Game[i];
 
-		RecalcPossible();
+		RepopulateCandidates();
 	}
 
-	void Sudoku::SetNumber(size_t index, unsigned char val)
+	bool Sudoku::IsComplete() const
 	{
-		assert(index < m_Game.size() && val <= 9);
-		if (index >= m_Game.size() || val > 9 || m_Given[index])
-			return;
+		return std::find(m_Game.begin(), m_Game.end(), 0) == m_Game.end();
+	}
 
-		auto const old{ m_Game[index] };
-		if (old == val)
-			return;
+	bool Sudoku::IsDead(size_t index) const
+	{
+		return !m_Game[index] && Legal(index).empty();
+	}
+
+	std::set<unsigned char> Sudoku::Legal(size_t index) const
+	{
+		std::set<unsigned char> ret;
+		if (m_Game[index])
+			return ret;
+
+		ret = all_possible;
+		for_each_peer(index, [&](size_t i) { ret.erase(m_Game[i]); });
+		return ret;
+	}
+
+	bool Sudoku::SetNumber(size_t index, unsigned char val)
+	{
+		if (index >= m_Game.size() || val > 9 || m_Given[index])
+			return false;
+
+		if (val == 0)
+		{
+			if (!m_Game[index])
+				return false;
+
+			m_Game[index] = 0;
+			m_Possible[index] = Legal(index);	// peers get nothing back, the player can click them in
+			return true;
+		}
+
+		if (m_Game[index] || !m_Possible[index].count(val))
+			return false;
 
 		m_Game[index] = val;
-
-		// Placing into an empty cell can only shrink candidates, so do it incrementally.
-		// Overwriting or erasing can bring candidates back, which erase() can't undo -> rebuild.
-		if (!old && val)
-			Eliminate(index, val);
-		else
-			RecalcPossible();
+		Eliminate(index, val);
+		return true;
 	}
 
-	bool Sudoku::IsConflict(size_t index) const
+	bool Sudoku::ToggleCandidate(size_t index, unsigned char val)
 	{
-		auto const val{ m_Game[index] };
-		bool found{ false };
+		if (index >= m_Game.size() || val < 1 || val > 9 || m_Game[index])
+			return false;
 
-		if (val)
-			for_each_peer(index, [&](size_t i) { found |= i != index && m_Game[i] == val; });
+		auto& cand{ m_Possible[index] };
+		if (cand.erase(val))
+			return true;
 
-		return found;
+		if (!Legal(index).count(val))
+			return false;
+
+		cand.insert(val);
+		return true;
+	}
+
+	void Sudoku::RepopulateCandidates()
+	{
+		for (size_t i = 0; i < m_Game.size(); i++)
+			m_Possible[i] = Legal(i);
 	}
 
 	void Sudoku::Eliminate(size_t index, unsigned char val)
 	{
 		for_each_peer(index, [&](size_t i) { m_Possible[i].erase(val); });
 		m_Possible[index].clear();	// a filled cell has no candidates
-	}
-
-	void Sudoku::RecalcPossible()
-	{
-		m_Possible.fill(all_possible);
-
-		for (size_t i = 0; i < m_Game.size(); i++)
-			if (auto const val{ m_Game[i] })
-				Eliminate(i, val);
 	}
 }
