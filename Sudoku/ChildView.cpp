@@ -16,7 +16,7 @@
 // CChildView
 
 CChildView::CChildView()
-	:m_Game{ 20, 20 }
+	:m_Game{ 35, 50 }
 	, m_bShowCandidates{ TRUE }
 	, m_iSelected{ -1 }
 {}
