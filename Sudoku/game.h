@@ -68,7 +68,8 @@ namespace game
 
 		// val 1..9: puts a Number into an empty cell, only if val is currently a candidate there.
 		//           Removes val from the candidates of the peers.
-		// val == 0: removes a Number; the cell gets all its legal candidates, peers are untouched.
+		// val == 0: removes a Number; the cell gets all its legal candidates, and the removed digit comes
+		//           back as a candidate in every peer where it is legal again, even if the player had erased it.
 		// Givens are read-only. Returns true if anything changed.
 		bool SetNumber(size_t index, unsigned char val);
 

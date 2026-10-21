@@ -197,8 +197,16 @@ namespace game
 			if (!m_Game[index])
 				return false;
 
+			auto const old{ m_Game[index] };
 			m_Game[index] = 0;
-			m_Possible[index] = Legal(index);	// peers get nothing back, the player can click them in
+			m_Possible[index] = Legal(index);
+
+			// The digit is free again: revive it in the peers that nothing else blocks (Legal is empty for filled cells).
+			for_each_peer(index, [&](size_t i)
+				{
+					if (i != index && Legal(i).count(old))
+						m_Possible[i].insert(old);
+				});
 			return true;
 		}
 

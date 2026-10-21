@@ -31,7 +31,6 @@ BEGIN_MESSAGE_MAP(CChildView, CWnd)
 	ON_WM_LBUTTONDOWN()
 	ON_WM_LBUTTONDBLCLK()
 	ON_WM_RBUTTONUP()
-	ON_WM_CHAR()
 	ON_WM_KEYDOWN()
 END_MESSAGE_MAP()
 
@@ -63,7 +62,7 @@ namespace
 	constexpr COLORREF clrThinLine = RGB(176, 184, 198);
 	constexpr COLORREF clrThickLine = RGB(40, 48, 66);
 	constexpr COLORREF clrGiven = RGB(28, 34, 48);
-	constexpr COLORREF clrPlayer = RGB(30, 100, 210);
+	constexpr COLORREF clrPlayer = RGB(96, 130, 10);
 	constexpr COLORREF clrCandidate = RGB(80, 92, 116);			// legal and selected
 	constexpr COLORREF clrCandidateFaint = RGB(196, 203, 215);	// legal, but erased by the player
 
@@ -253,6 +252,12 @@ void CChildView::EnterNumber(unsigned char val)
 	}
 }
 
+void CChildView::ToggleSelectedCandidate(unsigned char digit)
+{
+	if (m_iSelected >= 0 && m_bShowCandidates && m_Game.ToggleCandidate(m_iSelected, digit))
+		Invalidate(FALSE);
+}
+
 void CChildView::OnLButtonDown(UINT nFlags, CPoint point)
 {
 	SetFocus();	// keyboard input goes to the focused window
@@ -324,24 +329,32 @@ void CChildView::OnRButtonUp(UINT nFlags, CPoint point)
 	Invalidate(FALSE);
 }
 
-void CChildView::OnChar(UINT nChar, UINT nRepCnt, UINT nFlags)
-{
-	if (nChar >= _T('1') && nChar <= _T('9'))
-		EnterNumber((unsigned char)(nChar - _T('0')));
-	else if (nChar == _T('0') || nChar == VK_BACK)
-		EnterNumber(0);
-	else
-		CWnd::OnChar(nChar, nRepCnt, nFlags);
-}
-
 void CChildView::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
 {
+	// 1..9 work on candidates, Shift+0..9 on Numbers (Shift+0 removes the Number). The virtual key of a digit
+	// does not depend on Shift, so this is layout independent.
+	int digit{ -1 };
+	if (nChar >= _T('0') && nChar <= _T('9'))
+		digit = (int)(nChar - _T('0'));
+	else if (nChar >= VK_NUMPAD0 && nChar <= VK_NUMPAD9)
+		digit = (int)(nChar - VK_NUMPAD0);
+
+	if (digit >= 0)
+	{
+		if (::GetKeyState(VK_SHIFT) & 0x8000)
+			EnterNumber((unsigned char)digit);
+		else if (digit > 0)
+			ToggleSelectedCandidate((unsigned char)digit);
+		return;
+	}
+
 	int const sel{ m_iSelected < 0 ? 40 : m_iSelected };
 	int x{ sel % 9 }, y{ sel / 9 };
 
 	switch (nChar)
 	{
-	case VK_DELETE:	EnterNumber(0);			return;
+	case VK_DELETE:
+	case VK_BACK:	EnterNumber(0);			return;
 	case VK_LEFT:	x = max(0, x - 1);		break;
 	case VK_RIGHT:	x = min(8, x + 1);		break;
 	case VK_UP:		y = max(0, y - 1);		break;
