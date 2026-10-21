@@ -6,6 +6,8 @@ namespace game
 {
 	using Line = std::array<unsigned char, 9>;
 	using table_t = std::array<unsigned char, 9 * 9>;
+	using Variants = std::set<unsigned char>;
+	using Candidates = std::array<Variants, 9 * 9>;
 
 	bool is_valid(Line const&);
 	size_t to_row(size_t);
@@ -45,6 +47,8 @@ namespace game
 
 		bool is_valid()const;
 		unsigned char at(size_t y, size_t x)const;
+		Candidates Repopulate()const;
+		Variants Legal(size_t index)const;
 	};
 
 	class Sudoku
@@ -64,7 +68,6 @@ namespace game
 
 		// Digits that no peer (row, column, room) holds as a Number. Empty for a filled cell.
 		// GetPossible() is always a subset of this: it is what the player has left selected.
-		std::set<unsigned char> Legal(size_t index)const;
 
 		// val 1..9: puts a Number into an empty cell, only if val is currently a candidate there.
 		//           Removes val from the candidates of the peers.
@@ -85,6 +88,6 @@ namespace game
 	private:
 		Table m_Origin, m_Game;
 		std::array<bool, 9 * 9> m_Given{};
-		std::array<std::set<unsigned char>, 9 * 9> m_Possible;
+		Candidates m_Possible;
 	};
 }

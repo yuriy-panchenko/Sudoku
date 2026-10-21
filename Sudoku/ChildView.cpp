@@ -6,7 +6,7 @@
 #include "framework.h"
 #include "Sudoku.h"
 #include "ChildView.h"
-#include "game.h"
+#include "Solver.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -19,7 +19,11 @@ CChildView::CChildView()
 	:m_Game{ 35, 50 }
 	, m_bShowCandidates{ TRUE }
 	, m_iSelected{ -1 }
-{}
+{
+	solver::Brute br{ m_Game.GetTable() };
+
+	int y = 0;
+}
 
 CChildView::~CChildView()
 {}
@@ -207,7 +211,7 @@ void CChildView::OnPaint()
 				{
 					// Every legal digit is drawn: solid if still selected, faint (smaller, italic) if the player erased it.
 					int const sub{ cell / 3 };
-					for (auto d : m_Game.Legal(ind))
+					for (auto d : tab.Legal(ind))
 					{
 						bool const selected{ possible[ind].count(d) != 0 };
 						bool const hovered{ (int)ind == m_Hover.cell && d == m_Hover.digit };
@@ -380,7 +384,7 @@ void CChildView::OnMouseMove(UINT nFlags, CPoint point)
 
 	// Only a candidate slot (a legal digit of an empty cell) is highlighted.
 	Hit hit{ HitTest(point) };
-	if (!m_bShowCandidates || hit.cell < 0 || m_Game.GetTable()[hit.cell] || !m_Game.Legal(hit.cell).count((unsigned char)hit.digit))
+	if (!m_bShowCandidates || hit.cell < 0 || m_Game.GetTable()[hit.cell] || !m_Game.GetTable().Legal(hit.cell).count((unsigned char)hit.digit))
 		hit = Hit{};
 
 	if (hit.cell != m_Hover.cell || hit.digit != m_Hover.digit)

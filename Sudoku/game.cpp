@@ -2,6 +2,7 @@
 #include "game.h"
 #include <vector>
 #include <algorithm>
+#include <cassert>
 
 namespace game
 {
@@ -109,6 +110,16 @@ namespace game
 		return table_t::at(y * 9 + x);
 	}
 
+	Candidates Table::Repopulate() const
+	{
+		Candidates ret;
+
+		for (size_t i = 0; i < size(); i++)
+			ret[i] = Legal(i);
+
+		return ret;
+	}
+
 	Table::Table(size_t shuffle_count)
 		:table_t{ initial }
 	{
@@ -173,17 +184,17 @@ namespace game
 
 	bool Sudoku::IsDead(size_t index) const
 	{
-		return !m_Game[index] && Legal(index).empty();
+		return !m_Game[index] && m_Game.Legal(index).empty();
 	}
 
-	std::set<unsigned char> Sudoku::Legal(size_t index) const
+	Variants Table::Legal(size_t index) const
 	{
-		std::set<unsigned char> ret;
-		if (m_Game[index])
+		Variants ret;
+		if ((*this)[index])
 			return ret;
 
 		ret = all_possible;
-		for_each_peer(index, [&](size_t i) { ret.erase(m_Game[i]); });
+		for_each_peer(index, [&](size_t i) { ret.erase((*this)[i]); });
 		return ret;
 	}
 
@@ -199,12 +210,12 @@ namespace game
 
 			auto const old{ m_Game[index] };
 			m_Game[index] = 0;
-			m_Possible[index] = Legal(index);
+			m_Possible[index] = m_Game.Legal(index);
 
 			// The digit is free again: revive it in the peers that nothing else blocks (Legal is empty for filled cells).
 			for_each_peer(index, [&](size_t i)
 				{
-					if (i != index && Legal(i).count(old))
+					if (i != index && m_Game.Legal(i).count(old))
 						m_Possible[i].insert(old);
 				});
 			return true;
@@ -227,7 +238,7 @@ namespace game
 		if (cand.erase(val))
 			return true;
 
-		if (!Legal(index).count(val))
+		if (!m_Game.Legal(index).count(val))
 			return false;
 
 		cand.insert(val);
@@ -236,8 +247,7 @@ namespace game
 
 	void Sudoku::RepopulateCandidates()
 	{
-		for (size_t i = 0; i < m_Game.size(); i++)
-			m_Possible[i] = Legal(i);
+		m_Possible = m_Game.Repopulate();
 	}
 
 	void Sudoku::Eliminate(size_t index, unsigned char val)
