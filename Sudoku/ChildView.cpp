@@ -20,7 +20,7 @@ CChildView::CChildView()
 	, m_bShowCandidates{ TRUE }
 	, m_iSelected{ -1 }
 {
-	solver::Brute br{ m_Game.GetTable() };
+	//solver::Brute br{ m_Game.GetTable() };
 
 	int y = 0;
 }
@@ -181,7 +181,10 @@ void CChildView::OnPaint()
 			frame(r, 2, clrSelectedBorder);
 		}
 
-		// 4. Digits and candidates.
+		// 4. Digits and candidates. If a Number is selected, all Numbers and candidates with the same value
+		//    are drawn in the hover color.
+		unsigned char const same{ m_iSelected >= 0 ? tab[m_iSelected] : (unsigned char)0 };
+
 		CFont fontGiven, fontPlayer, fontCandidate, fontCandidateFaint;
 		MakeFont(fontGiven, cell * 75 / 100, FW_BOLD);
 		MakeFont(fontPlayer, cell * 75 / 100, FW_NORMAL);
@@ -201,7 +204,7 @@ void CChildView::OnPaint()
 				{
 					bool const given{ m_Game.IsGiven(ind) };
 					dc.SelectObject(given ? &fontGiven : &fontPlayer);
-					dc.SetTextColor(given ? clrGiven : clrPlayer);
+					dc.SetTextColor(val == same ? clrCandidateHover : given ? clrGiven : clrPlayer);
 
 					CString s;
 					s.Format(_T("%d"), (int)val);
@@ -214,7 +217,7 @@ void CChildView::OnPaint()
 					for (auto d : tab.Legal(ind))
 					{
 						bool const selected{ possible[ind].count(d) != 0 };
-						bool const hovered{ (int)ind == m_Hover.cell && d == m_Hover.digit };
+						bool const hovered{ ((int)ind == m_Hover.cell && d == m_Hover.digit) || d == same };
 						dc.SelectObject(selected ? &fontCandidate : &fontCandidateFaint);
 						dc.SetTextColor(hovered ? clrCandidateHover : selected ? clrCandidate : clrCandidateFaint);
 						int const sx{ (d - 1) % 3 }, sy{ (d - 1) / 3 };
@@ -276,6 +279,13 @@ void CChildView::OnLButtonDown(UINT nFlags, CPoint point)
 	if (hit.cell < 0)
 		return;
 
+	if (hit.cell == m_iSelected && m_Game.GetTable()[hit.cell])
+	{
+		m_iSelected = -1;	// click on the selected Number deselects it
+		Invalidate(FALSE);
+		return;
+	}
+
 	m_iSelected = hit.cell;
 
 	// Click on a candidate: erase it if selected, put it back if it is legal here. Numbers are only selected.
@@ -302,13 +312,25 @@ void CChildView::OnLButtonDblClk(UINT nFlags, CPoint point)
 	if (!m_bShowCandidates)
 		return;
 
-	// The first click of this double-click has just toggled the candidate. If that erased it, put it back
-	// (a no-op for illegal digits), so placing works the same for solid and faint candidates.
 	auto const digit{ (unsigned char)hit.digit };
-	if (!m_Game.GetPossible()[hit.cell].count(digit))
-		m_Game.ToggleCandidate(hit.cell, digit);
+	auto const& cand{ m_Game.GetPossible()[hit.cell] };
 
-	EnterNumber(digit);
+	if (m_Game.GetTable().Legal(hit.cell).count(digit))
+	{
+		// Double-click on a candidate places that digit. The first click of this double-click has just toggled
+		// it; if that erased it, put it back, so placing works the same for solid and faint candidates.
+		if (!cand.count(digit))
+			m_Game.ToggleCandidate(hit.cell, digit);
+
+		EnterNumber(digit);
+	}
+	else if (cand.size() == 1)
+	{
+		// Double-click anywhere else on a cell with exactly one candidate left places that candidate.
+		unsigned char const only{ *cand.begin() };
+		EnterNumber(only);
+	}
+
 	Invalidate(FALSE);
 }
 
@@ -363,10 +385,11 @@ void CChildView::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
 	{
 	case VK_DELETE:
 	case VK_BACK:	EnterNumber(0);			return;
-	case VK_LEFT:	x = max(0, x - 1);		break;
-	case VK_RIGHT:	x = min(8, x + 1);		break;
-	case VK_UP:		y = max(0, y - 1);		break;
-	case VK_DOWN:	y = min(8, y + 1);		break;
+	// The selection wraps around: Left on the first column goes to the last one, and so on.
+	case VK_LEFT:	x = (x + 8) % 9;		break;
+	case VK_RIGHT:	x = (x + 1) % 9;		break;
+	case VK_UP:		y = (y + 8) % 9;		break;
+	case VK_DOWN:	y = (y + 1) % 9;		break;
 	default:		CWnd::OnKeyDown(nChar, nRepCnt, nFlags);	return;
 	}
 
