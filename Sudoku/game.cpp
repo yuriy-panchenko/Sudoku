@@ -28,8 +28,25 @@ namespace game
 
 	size_t to_room(size_t ind)
 	{
-		auto const x{ ind % 3 }, y{ ind / 3 };
-		return y * 9 * 3 + x * 3;
+		return to_row(ind) / 3 * 3 + to_column(ind) / 3;
+	}
+
+	namespace
+	{
+		// Visits every cell that shares a row, column or room with `index` (the cell itself included).
+		template<class F>
+		void for_each_peer(size_t index, F&& f)
+		{
+			auto const row{ to_row(index) }, col{ to_column(index) }, room{ to_room(index) };
+			auto const room_start{ room / 3 * 27 + room % 3 * 3 };
+
+			for (size_t i = 0; i < 9; i++)
+			{
+				f(row * 9 + i);
+				f(i * 9 + col);
+				f(room_start + i / 3 * 9 + i % 3);
+			}
+		}
 	}
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -94,17 +111,14 @@ namespace game
 	Table::Table(size_t shuffle_count)
 		:table_t{ initial }
 	{
+		// Rows may only be swapped inside one band of 3 (columns: inside one stack),
+		// swapping across bands breaks the 3x3 rooms.
 		auto pick_pair = []()->std::pair<size_t, size_t>
 			{
-				size_t a{ size_t(rand() % 9) },
-					b{ size_t(rand() % 8) };
-				if (b >= a)
-				{
-					++b;
-					if (b == 8)
-						b = 0;
-				}
-				return { a, b };
+				size_t const base{ size_t(rand() % 3) * 3 };
+				size_t const a{ size_t(rand() % 3) };
+				size_t const b{ (a + 1 + size_t(rand() % 2)) % 3 };
+				return { base + a, base + b };
 			};
 
 		for (size_t i = 0; i < shuffle_count; i++)
@@ -145,28 +159,55 @@ namespace game
 		:m_Origin{ shuffle_count }
 		, m_Game{ m_Origin, digits_remain }
 	{
-		m_Possible.fill(all_possible);
+		for (size_t i = 0; i < m_Game.size(); i++)
+			m_Given[i] = m_Game[i];
 
-		for (size_t i = 0; i < 9 * 9; i++)
-			if (auto val{ m_Game[i] })
-				SetNumber(i, val);
+		RecalcPossible();
 	}
 
 	void Sudoku::SetNumber(size_t index, unsigned char val)
 	{
+		assert(index < m_Game.size() && val <= 9);
+		if (index >= m_Game.size() || val > 9 || m_Given[index])
+			return;
+
+		auto const old{ m_Game[index] };
+		if (old == val)
+			return;
+
 		m_Game[index] = val;
 
-		auto iLine{ to_row(index) };
+		// Placing into an empty cell can only shrink candidates, so do it incrementally.
+		// Overwriting or erasing can bring candidates back, which erase() can't undo -> rebuild.
+		if (!old && val)
+			Eliminate(index, val);
+		else
+			RecalcPossible();
+	}
 
-		for (size_t i = 0; i < 9; i++)
-			m_Possible[iLine * 9 + i].erase(val);
+	bool Sudoku::IsConflict(size_t index) const
+	{
+		auto const val{ m_Game[index] };
+		bool found{ false };
 
-		iLine = to_column(index);
+		if (val)
+			for_each_peer(index, [&](size_t i) { found |= i != index && m_Game[i] == val; });
 
-		for (size_t i = 0; i < 9; i++)
-			m_Possible[i * 9 + iLine].erase(val);
+		return found;
+	}
 
-		iLine = to_room(index);
-		
+	void Sudoku::Eliminate(size_t index, unsigned char val)
+	{
+		for_each_peer(index, [&](size_t i) { m_Possible[i].erase(val); });
+		m_Possible[index].clear();	// a filled cell has no candidates
+	}
+
+	void Sudoku::RecalcPossible()
+	{
+		m_Possible.fill(all_possible);
+
+		for (size_t i = 0; i < m_Game.size(); i++)
+			if (auto const val{ m_Game[i] })
+				Eliminate(i, val);
 	}
 }

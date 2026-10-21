@@ -12,7 +12,8 @@ namespace game
 	size_t to_column(size_t);
 	size_t to_room(size_t);
 
-	inline const std::set<unsigned char> all_possible = { 1,2,3,4,5,6,7,8,9, };
+	//inline const std::set<unsigned char> all_possible = { 1,2,3,4,5,6,7,8,9, };
+	constexpr std::initializer_list<unsigned char> all_possible = { 1,2,3,4,5,6,7,8,9, };
 
 	class Table
 		:public table_t
@@ -49,15 +50,25 @@ namespace game
 	class Sudoku
 	{
 	public:
-		Sudoku() = default;
+		//Sudoku() = default;
 		Sudoku(size_t digits_remain, size_t shuffle_count);
-		Sudoku(Table&&);
+		//Sudoku(Table&&);
 
 		auto& GetTable()const { return m_Game; }
+		auto& GetPossible()const { return m_Possible; }
+		bool IsGiven(size_t index)const { return m_Given[index]; }
+		bool IsConflict(size_t index)const;
+
+		// val == 0 clears the cell; givens are read-only.
 		void SetNumber(size_t index, unsigned char val);
 
 	private:
+		void Eliminate(size_t index, unsigned char val);
+		void RecalcPossible();
+
+	private:
 		Table m_Origin, m_Game;
+		std::array<bool, 9 * 9> m_Given{};
 		std::array<std::set<unsigned char>, 9 * 9> m_Possible;
 	};
 }

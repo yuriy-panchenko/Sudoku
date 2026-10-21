@@ -44,6 +44,10 @@ CSudokuApp::CSudokuApp() noexcept
 
 	// TODO: add construction code here,
 	// Place all significant initialization in InitInstance
+#ifndef _DEBUG
+	::srand(static_cast<unsigned int>(::time(nullptr)));
+#endif // !_DEBUG
+
 }
 
 // The one and only CSudokuApp object
@@ -105,7 +109,7 @@ BOOL CSudokuApp::InitInstance()
 	//TODO: add additional member variables and load calls for
 	//	additional menu types your application may need
 	HINSTANCE hInst = AfxGetResourceHandle();
-	m_hMDIMenu  = ::LoadMenu(hInst, MAKEINTRESOURCE(IDR_SudokuTYPE));
+	m_hMDIMenu = ::LoadMenu(hInst, MAKEINTRESOURCE(IDR_SudokuTYPE));
 	m_hMDIAccel = ::LoadAccelerators(hInst, MAKEINTRESOURCE(IDR_SudokuTYPE));
 
 
@@ -114,6 +118,8 @@ BOOL CSudokuApp::InitInstance()
 	// The main window has been initialized, so show and update it
 	pFrame->ShowWindow(m_nCmdShow);
 	pFrame->UpdateWindow();
+
+	OnFileNew();
 
 	return TRUE;
 }
@@ -150,7 +156,7 @@ class CAboutDlg : public CDialogEx
 public:
 	CAboutDlg() noexcept;
 
-// Dialog Data
+	// Dialog Data
 #ifdef AFX_DESIGN_TIME
 	enum { IDD = IDD_ABOUTBOX };
 #endif
@@ -158,14 +164,13 @@ public:
 protected:
 	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV support
 
-// Implementation
+	// Implementation
 protected:
 	DECLARE_MESSAGE_MAP()
 };
 
 CAboutDlg::CAboutDlg() noexcept : CDialogEx(IDD_ABOUTBOX)
-{
-}
+{}
 
 void CAboutDlg::DoDataExchange(CDataExchange* pDX)
 {
